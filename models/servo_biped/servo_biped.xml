@@ -1,0 +1,187 @@
+<!--
+  OpenServoSim - 10-DOF Servo Biped Model
+  
+  This MJCF file defines a simplified bipedal robot with position-controlled
+  actuators that mimic the behavior of serial bus servos (e.g., LX-15D).
+  
+  Key design choices:
+  - Uses 'position' actuators (not 'motor') to match servo physics
+  - Dimensions derived from real hardware IK parameters:
+    - Hip-to-knee offset: 40mm
+    - Thigh length: 65mm  
+    - Shin length: 65mm
+    - Ankle offset: 24.5mm
+    - Total leg: 194.5mm
+  - Mass distribution from ODE simulation reference
+  
+  Coordinate convention:
+    X = forward, Y = left, Z = up
+-->
+<mujoco model="servo_biped">
+  <compiler angle="radian" autolimits="true"/>
+  
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicit">
+    <flag contact="enable"/>
+  </option>
+
+  <default>
+    <!-- Default geom properties -->
+    <geom rgba="0.7 0.7 0.7 1" condim="4" friction="1.0 0.005 0.0001"/>
+    
+    <!-- Servo actuator defaults: position control with limited kp -->
+    <position kp="50" ctrlrange="-1.57 1.57" forcerange="-2.5 2.5"/>
+    
+    <!-- Joint defaults -->
+    <joint damping="0.5" armature="0.01"/>
+  </default>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="512"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.2 0.3 0.4" rgb2="0.3 0.4 0.5" width="512" height="512"/>
+    <material name="grid" texture="grid" texrepeat="8 8" reflectance="0.2"/>
+    <material name="body_mat" rgba="0.3 0.3 0.8 1"/>
+    <material name="leg_mat" rgba="0.5 0.5 0.5 1"/>
+    <material name="foot_mat" rgba="0.2 0.2 0.2 1"/>
+  </asset>
+
+  <worldbody>
+    <!-- Ground plane -->
+    <geom name="floor" type="plane" size="5 5 0.1" material="grid"/>
+    <light pos="0 0 3" dir="0 0 -1" diffuse="0.8 0.8 0.8"/>
+    <light pos="1 1 3" dir="-0.5 -0.5 -1" diffuse="0.6 0.6 0.6"/>
+
+    <!-- ===== Robot Body ===== -->
+    <!-- Free joint allows the robot to move freely in space -->
+    <body name="torso" pos="0 0 0.35">
+      <freejoint name="root"/>
+      <inertial pos="0 0 0" mass="1.24" diaginertia="0.005 0.005 0.002"/>
+      
+      <!-- Torso geometry -->
+      <geom name="torso_geom" type="box" size="0.04 0.04 0.06" material="body_mat"/>
+      
+      <!-- IMU sensor site (on torso) -->
+      <site name="imu_site" pos="0 0 0.03" size="0.005"/>
+
+      <!-- ===== RIGHT LEG ===== -->
+      <body name="r_hip_yaw" pos="0 -0.03 -0.06">
+        <!-- K0: Hip Pitch -->
+        <joint name="r_hip_pitch" type="hinge" axis="0 1 0" range="-1.2 1.2"/>
+        
+        <body name="r_hip_roll" pos="0 0 -0.04">
+          <!-- K1: Hip Roll -->
+          <joint name="r_hip_roll" type="hinge" axis="1 0 0" range="-0.6 0.6"/>
+          <inertial pos="0 0 -0.0325" mass="0.08" diaginertia="0.0001 0.0001 0.00005"/>
+          
+          <!-- Thigh geometry (65mm) -->
+          <geom name="r_thigh" type="capsule" fromto="0 0 0 0 0 -0.065" size="0.015" material="leg_mat"/>
+          
+          <body name="r_knee" pos="0 0 -0.065">
+            <!-- H: Knee -->
+            <joint name="r_knee" type="hinge" axis="0 1 0" range="0 2.4"/>
+            <inertial pos="0 0 -0.0325" mass="0.04" diaginertia="0.00005 0.00005 0.00002"/>
+            
+            <!-- Shin geometry (65mm) -->
+            <geom name="r_shin" type="capsule" fromto="0 0 0 0 0 -0.065" size="0.012" material="leg_mat"/>
+            
+            <body name="r_ankle_pitch" pos="0 0 -0.065">
+              <!-- A0: Ankle Pitch -->
+              <joint name="r_ankle_pitch" type="hinge" axis="0 1 0" range="-1.2 1.2"/>
+              
+              <body name="r_ankle_roll" pos="0 0 -0.0245">
+                <!-- A1: Ankle Roll -->
+                <joint name="r_ankle_roll" type="hinge" axis="1 0 0" range="-0.6 0.6"/>
+                <inertial pos="0 0 -0.01" mass="0.01" diaginertia="0.00001 0.00002 0.00002"/>
+                
+                <!-- Foot geometry -->
+                <geom name="r_foot" type="box" size="0.04 0.025 0.005" pos="0.01 0 -0.01" material="foot_mat"/>
+                
+                <!-- Contact sensors -->
+                <site name="r_foot_front" pos="0.03 0 -0.015" size="0.005"/>
+                <site name="r_foot_back" pos="-0.01 0 -0.015" size="0.005"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+
+      <!-- ===== LEFT LEG ===== -->
+      <body name="l_hip_yaw" pos="0 0.03 -0.06">
+        <!-- K0: Hip Pitch -->
+        <joint name="l_hip_pitch" type="hinge" axis="0 1 0" range="-1.2 1.2"/>
+        
+        <body name="l_hip_roll" pos="0 0 -0.04">
+          <!-- K1: Hip Roll -->
+          <joint name="l_hip_roll" type="hinge" axis="1 0 0" range="-0.6 0.6"/>
+          <inertial pos="0 0 -0.0325" mass="0.08" diaginertia="0.0001 0.0001 0.00005"/>
+          
+          <!-- Thigh geometry (65mm) -->
+          <geom name="l_thigh" type="capsule" fromto="0 0 0 0 0 -0.065" size="0.015" material="leg_mat"/>
+          
+          <body name="l_knee" pos="0 0 -0.065">
+            <!-- H: Knee -->
+            <joint name="l_knee" type="hinge" axis="0 1 0" range="0 2.4"/>
+            <inertial pos="0 0 -0.0325" mass="0.04" diaginertia="0.00005 0.00005 0.00002"/>
+            
+            <!-- Shin geometry (65mm) -->
+            <geom name="l_shin" type="capsule" fromto="0 0 0 0 0 -0.065" size="0.012" material="leg_mat"/>
+            
+            <body name="l_ankle_pitch" pos="0 0 -0.065">
+              <!-- A0: Ankle Pitch -->
+              <joint name="l_ankle_pitch" type="hinge" axis="0 1 0" range="-1.2 1.2"/>
+              
+              <body name="l_ankle_roll" pos="0 0 -0.0245">
+                <!-- A1: Ankle Roll -->
+                <joint name="l_ankle_roll" type="hinge" axis="1 0 0" range="-0.6 0.6"/>
+                <inertial pos="0 0 -0.01" mass="0.01" diaginertia="0.00001 0.00002 0.00002"/>
+                
+                <!-- Foot geometry -->
+                <geom name="l_foot" type="box" size="0.04 0.025 0.005" pos="0.01 0 -0.01" material="foot_mat"/>
+                
+                <!-- Contact sensors -->
+                <site name="l_foot_front" pos="0.03 0 -0.015" size="0.005"/>
+                <site name="l_foot_back" pos="-0.01 0 -0.015" size="0.005"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- ===== ACTUATORS (Position Servos) ===== -->
+  <!-- 
+    Using 'position' type actuators to match servo behavior:
+    - kp controls the servo stiffness (proportional gain)
+    - forcerange limits the maximum torque (like servo stall torque)
+    - ctrlrange defines the angular range
+  -->
+  <actuator>
+    <!-- Right leg (5 DOF) -->
+    <position name="r_hip_pitch_servo"   joint="r_hip_pitch"   kp="50" forcerange="-2.5 2.5"/>
+    <position name="r_hip_roll_servo"    joint="r_hip_roll"    kp="50" forcerange="-2.5 2.5"/>
+    <position name="r_knee_servo"        joint="r_knee"        kp="60" forcerange="-3.0 3.0"/>
+    <position name="r_ankle_pitch_servo" joint="r_ankle_pitch" kp="50" forcerange="-2.5 2.5"/>
+    <position name="r_ankle_roll_servo"  joint="r_ankle_roll"  kp="50" forcerange="-2.5 2.5"/>
+    
+    <!-- Left leg (5 DOF) -->
+    <position name="l_hip_pitch_servo"   joint="l_hip_pitch"   kp="50" forcerange="-2.5 2.5"/>
+    <position name="l_hip_roll_servo"    joint="l_hip_roll"    kp="50" forcerange="-2.5 2.5"/>
+    <position name="l_knee_servo"        joint="l_knee"        kp="60" forcerange="-3.0 3.0"/>
+    <position name="l_ankle_pitch_servo" joint="l_ankle_pitch" kp="50" forcerange="-2.5 2.5"/>
+    <position name="l_ankle_roll_servo"  joint="l_ankle_roll"  kp="50" forcerange="-2.5 2.5"/>
+  </actuator>
+
+  <!-- ===== SENSORS ===== -->
+  <sensor>
+    <!-- IMU sensors on torso -->
+    <gyro name="imu_gyro" site="imu_site"/>
+    <accelerometer name="imu_accel" site="imu_site"/>
+    <framequat name="imu_quat" objtype="site" objname="imu_site"/>
+    
+    <!-- Foot contact force sensors -->
+    <touch name="r_foot_front_touch" site="r_foot_front"/>
+    <touch name="r_foot_back_touch" site="r_foot_back"/>
+    <touch name="l_foot_front_touch" site="l_foot_front"/>
+    <touch name="l_foot_back_touch" site="l_foot_back"/>
+  </sensor>
+</mujoco>
