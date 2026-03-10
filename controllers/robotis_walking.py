@@ -457,6 +457,30 @@ class WalkingEngine:
             arm_swing = wsin(t, T, math.pi * 1.5,
                            self._x_move_amp * self.p.arm_swing_gain * 10, 0)
         
+        # Pseudo-IK for Lateral Movement (Sidestepping)
+        # The 3-DOF solver ignores Y. We convert lateral foot displacement into Roll angles.
+        # sin(roll) = Y / LEG_LENGTH. Since Y is small, roll = asin(Y / LEG_LENGTH).
+        # We apply this to hip_roll and the opposite to ank_roll to keep foot flat.
+        r_lat_roll = math.asin(np.clip(r_foot_y / LEG_LENGTH, -1.0, 1.0))
+        l_lat_roll = math.asin(np.clip(l_foot_y / LEG_LENGTH, -1.0, 1.0))
+        
+        # Pseudo-IK for Turn Movement (Yaw)
+        # The turning angle trajectory is generated sinusoidally just like x_move.
+        a_amp = self._a_move_amp / 2.0
+        a_amp_shift = self.p.angle_move_amplitude / 2.0  # Not strictly using history for yaw
+        
+        if self.phase == 0 or self.phase == 2:
+            r_foot_a = 0.0
+            l_foot_a = 0.0
+        elif self.phase == 1:
+            phase_a = self.x_move_phase + 2 * math.pi / self.x_move_period * self.l_ssp_start
+            l_foot_a = wsin(t, self.x_move_period, phase_a, a_amp, a_amp_shift)
+            r_foot_a = wsin(t, self.x_move_period, phase_a, -a_amp, -a_amp_shift)
+        elif self.phase == 3:
+            phase_a = self.x_move_phase + 2 * math.pi / self.x_move_period * self.r_ssp_start + math.pi
+            l_foot_a = wsin(t, self.x_move_period, phase_a, a_amp, a_amp_shift)
+            r_foot_a = wsin(t, self.x_move_period, phase_a, -a_amp, -a_amp_shift)
+            
         # Build joint angle dict (matching MuJoCo actuator names)
         # Joint axis conventions from op3.xml:
         #   l_hip_pitch: Y+    r_hip_pitch: Y-  (mirrored)
@@ -471,20 +495,20 @@ class WalkingEngine:
         # MuJoCo right Y-: positive = forward rotation (axis flipped)
         
         # Right leg: hip_pitch axis=Y-, knee axis=Y-, ank_pitch axis=Y+
-        angles["r_hip_yaw_act"] = 0.0
-        angles["r_hip_roll_act"] = pelvis_offset_r
+        angles["r_hip_yaw_act"] = r_foot_a
+        angles["r_hip_roll_act"] = pelvis_offset_r + r_lat_roll
         angles["r_hip_pitch_act"] = (r_hip_pitch + hip_pitch_off)
         angles["r_knee_act"] = (r_knee)
         angles["r_ank_pitch_act"] = -(r_ank_pitch)
-        angles["r_ank_roll_act"] = 0.0
+        angles["r_ank_roll_act"] = r_lat_roll  # Axis is opposite to hip_roll, so same sign = opposite bend
         
         # Left leg: hip_pitch axis=Y+, knee axis=Y+, ank_pitch axis=Y-
-        angles["l_hip_yaw_act"] = 0.0
-        angles["l_hip_roll_act"] = pelvis_offset_l
+        angles["l_hip_yaw_act"] = l_foot_a
+        angles["l_hip_roll_act"] = pelvis_offset_l + l_lat_roll
         angles["l_hip_pitch_act"] = -(l_hip_pitch + hip_pitch_off)
         angles["l_knee_act"] = -(l_knee)
         angles["l_ank_pitch_act"] = (l_ank_pitch)
-        angles["l_ank_roll_act"] = 0.0
+        angles["l_ank_roll_act"] = l_lat_roll
         
         # Arm pose verified against ROBOTIS source (op3_kinematics_dynamics.cpp):
         #   getJointDirection() = sum(axis components) = +1 or -1
